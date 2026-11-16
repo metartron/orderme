@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>接龍</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #fff; --text: #222; --muted: #777;
+    --accent: #2f7d5b; --accent-soft: #e3f1ea; --line: #e6e3da; --danger: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#17181a; --card:#212326; --text:#eee; --muted:#9a9a9a;
+            --accent:#5cc79a; --accent-soft:#223a2f; --line:#33363a; --danger:#ff7b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font: 16px/1.5 -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 16px 16px 48px; }
+  h1 { font-size: 22px; margin: 8px 0 2px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+          padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); font-weight: 600; }
+  label.field { display:block; font-size:14px; color:var(--muted); margin-bottom:6px; }
+  input[type=text] { width:100%; padding:12px; font-size:16px; border:1px solid var(--line);
+         border-radius:10px; background:var(--bg); color:var(--text); }
+  .items { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin: 12px 0; }
+  .item { padding:12px 10px; border:1.5px solid var(--line); border-radius:10px;
+          background:var(--bg); color:var(--text); font-size:15px; text-align:left; cursor:pointer; }
+  .item small { display:block; color:var(--muted); }
+  .item.sel { border-color:var(--accent); background:var(--accent-soft); }
+  .row { display:flex; align-items:center; gap:12px; margin-top:12px; }
+  .qty { display:flex; align-items:center; gap:10px; }
+  .qty button { width:38px; height:38px; border-radius:50%; border:1px solid var(--line);
+         background:var(--bg); color:var(--text); font-size:20px; cursor:pointer; }
+  .qty span { min-width:24px; text-align:center; font-weight:600; }
+  .primary { flex:1; padding:13px; border:0; border-radius:10px; background:var(--accent);
+         color:#fff; font-size:16px; font-weight:600; cursor:pointer; }
+  .primary:disabled { opacity:.5; }
+  ol { list-style:none; margin:0; padding:0; counter-reset:n; }
+  li { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--line); }
+  li:last-child { border-bottom:0; }
+  li .no { width:26px; color:var(--muted); font-size:14px; }
+  li .who { flex:1; }
+  li .what { color:var(--muted); font-size:14px; }
+  li.wait { opacity:.55; }
+  li button { border:0; background:none; color:var(--danger); font-size:13px; cursor:pointer; padding:4px 6px; }
+  .tag { font-size:12px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:0 5px; }
+  .stat { display:flex; justify-content:space-between; padding:4px 0; }
+  .total { border-top:1px solid var(--line); margin-top:6px; padding-top:8px; font-weight:700; }
+  .msg { font-size:14px; min-height:20px; margin-top:8px; }
+  .msg.err { color:var(--danger); } .msg.ok { color:var(--accent); }
+  .closed { background:var(--accent-soft); color:var(--accent); padding:10px 14px;
+            border-radius:10px; margin-bottom:16px; font-weight:600; }
+  .empty { color:var(--muted); text-align:center; padding:8px 0; }
+  input[type=password], textarea { width:100%; padding:12px; font-size:16px; font-family:inherit;
+         border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); }
+  .ghost { flex:1; padding:11px; border:1px solid var(--line); border-radius:10px;
+         background:var(--bg); color:var(--text); font-size:15px; cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">載入中…</h1>
+  <div class="sub" id="sub"></div>
+  <p style="margin:-8px 0 16px;font-size:14px"><a href="products.html" style="color:var(--accent)">看商品介紹 →</a></p>
+  <div id="closed" class="closed" hidden>此接龍已截止</div>
+
+  <section class="card" id="form">
+    <h2>我要報名</h2>
+    <label class="field" for="name">你的名字</label>
+    <input type="text" id="name" maxlength="20" placeholder="例如：小明" autocomplete="nickname">
+    <div class="items" id="items"></div>
+    <div class="row">
+      <div class="qty">
+        <button type="button" id="minus" aria-label="減少">−</button>
+        <span id="qty">1</span>
+        <button type="button" id="plus" aria-label="增加">+</button>
+        <span style="color:var(--muted);font-size:14px">份</span>
+      </div>
+      <button class="primary" id="submit">報名</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </section>
+
+  <section class="card">
+    <h2 id="listTitle">名單</h2>
+    <ol id="list"></ol>
+  </section>
+
+  <details class="card" id="admin">
+    <summary style="cursor:pointer;color:var(--muted);font-weight:600">主辦人：開新接龍</summary>
+    <div style="margin-top:12px">
+      <label class="field" for="pw">主辦人密碼</label>
+      <input type="password" id="pw" autocomplete="current-password">
+      <label class="field" for="newTitle" style="margin-top:12px">標題</label>
+      <input type="text" id="newTitle" maxlength="40" placeholder="例如：週五午餐">
+      <label class="field" for="newLimit" style="margin-top:12px">限額（可留空）</label>
+      <input type="text" id="newLimit" inputmode="numeric" placeholder="例如：20">
+      <label class="field" for="newMenu" style="margin-top:12px">菜單（一行一個品項，價格寫在後面，可省略）</label>
+      <textarea id="newMenu" rows="6" placeholder="雞腿飯 90&#10;排骨飯 85&#10;素食 80"></textarea>
+      <div class="row">
+        <button class="primary" id="newBtn">開新接龍</button>
+      </div>
+      <div class="row">
+        <button class="ghost" id="closeBtn">截止報名</button>
+        <button class="ghost" id="openBtn">重新開放</button>
+      </div>
+      <div class="msg" id="adminMsg"></div>
+    </div>
+  </details>
+
+  <section class="card" id="statCard" hidden>
+    <h2>統計</h2>
+    <div id="stats"></div>
+  </section>
+</main>
+
+<script>
+// ★ 部署好 Apps Script 後，把網址貼在這裡（結尾是 /exec）
+const API_URL = "請貼上你的 Apps Script 網址";
+
+let state = null;
+let selectedItem = "";
+let qty = 1;
+let busy = false;
+const $ = (id) => document.getElementById(id);
+
+async function api(payload) {
+  const res = payload
+    ? await fetch(API_URL, { method: "POST", body: JSON.stringify(payload) })
+    : await fetch(API_URL + (API_URL.includes("?") ? "&" : "?") + "t=" + Date.now());
+  return res.json();
+}
+
+function setMsg(text, kind) {
+  const el = $("msg");
+  el.textContent = text || "";
+  el.className = "msg" + (kind ? " " + kind : "");
+}
+
+function render() {
+  if (!state) return;
+  document.title = state.title;
+  $("title").textContent = state.title;
+  const count = state.entries.length;
+  $("sub").textContent = state.limit
+    ? "限額 " + state.limit + " 人，目前 " + Math.min(count, state.limit) + " 人"
+    : "目前 " + count + " 人";
+  $("closed").hidden = state.open;
+  $("form").hidden = !state.open;
+
+  // 菜單按鈕
+  const itemsEl = $("items");
+  itemsEl.textContent = "";
+  itemsEl.hidden = state.menu.length === 0;
+  if (state.menu.length && !state.menu.some((m) => m.item === selectedItem)) {
+    selectedItem = "";
+  }
+  state.menu.forEach((m) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "item" + (m.item === selectedItem ? " sel" : "");
+    b.textContent = m.item;
+    if (m.price !== null) {
+      const s = document.createElement("small");
+      s.textContent = "$" + m.price;
+      b.appendChild(s);
+    }
+    b.onclick = () => { selectedItem = m.item; render(); };
+    itemsEl.appendChild(b);
+  });
+
+  // 名單
+  const list = $("list");
+  list.textContent = "";
+  if (!state.entries.length) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "還沒有人報名，來當第一個吧！";
+    list.appendChild(li);
+  }
+  state.entries.forEach((e, i) => {
+    const li = document.createElement("li");
+    const wait = state.limit && i >= state.limit;
+    if (wait) li.className = "wait";
+    const no = document.createElement("span");
+    no.className = "no"; no.textContent = i + 1;
+    const who = document.createElement("span");
+    who.className = "who"; who.textContent = e.name;
+    const what = document.createElement("span");
+    what.className = "what";
+    what.textContent = e.item ? e.item + (e.qty > 1 ? " ×" + e.qty : "") : (e.qty > 1 ? "×" + e.qty : "");
+    li.append(no, who, what);
+    if (wait) {
+      const t = document.createElement("span");
+      t.className = "tag"; t.textContent = "候補";
+      li.appendChild(t);
+    }
+    if (state.open) {
+      const del = document.createElement("button");
+      del.textContent = "取消";
+      del.onclick = () => cancel(e.name);
+      li.appendChild(del);
+    }
+    list.appendChild(li);
+  });
+
+  // 統計（候補不計入）
+  const statCard = $("statCard");
+  const stats = $("stats");
+  stats.textContent = "";
+  if (state.menu.length && state.entries.length) {
+    const counted = state.limit ? state.entries.slice(0, state.limit) : state.entries;
+    const totals = {};
+    counted.forEach((e) => { totals[e.item] = (totals[e.item] || 0) + e.qty; });
+    let money = 0, hasPrice = false;
+    state.menu.forEach((m) => {
+      if (!totals[m.item]) return;
+      const row = document.createElement("div");
+      row.className = "stat";
+      const a = document.createElement("span"); a.textContent = m.item;
+      const b = document.createElement("span"); b.textContent = totals[m.item] + " 份";
+      row.append(a, b);
+      stats.appendChild(row);
+      if (m.price !== null) { money += m.price * totals[m.item]; hasPrice = true; }
+    });
+    if (hasPrice) {
+      const row = document.createElement("div");
+      row.className = "stat total";
+      const a = document.createElement("span"); a.textContent = "合計";
+      const b = document.createElement("span"); b.textContent = "$" + money;
+      row.append(a, b);
+      stats.appendChild(row);
+    }
+    statCard.hidden = false;
+  } else {
+    statCard.hidden = true;
+  }
+  $("qty").textContent = qty;
+}
+
+async function refresh() {
+  if (busy) return;
+  try {
+    const data = await api();
+    if (data.error) throw new Error(data.error);
+    state = data;
+    render();
+  } catch (err) {
+    if (!state) $("title").textContent = "讀取失敗，請稍後重新整理";
+  }
+}
+
+async function submit() {
+  const name = $("name").value.trim();
+  if (!name) return setMsg("請輸入名字", "err");
+  if (state.menu.length && !selectedItem) return setMsg("請選一個品項", "err");
+  try { localStorage.setItem("chain-name", name); } catch (e) {}
+  busy = true; $("submit").disabled = true; setMsg("送出中…");
+  try {
+    const data = await api({ action: "add", name, item: selectedItem, qty });
+    if (data.error) { setMsg(data.error, "err"); }
+    else { state = data; setMsg("報名成功！", "ok"); qty = 1; render(); }
+  } catch (err) {
+    setMsg("送出失敗，請再試一次", "err");
+  } finally {
+    busy = false; $("submit").disabled = false;
+  }
+}
+
+async function cancel(name) {
+  if (!confirm("確定要取消「" + name + "」的報名嗎？")) return;
+  busy = true;
+  try {
+    const data = await api({ action: "remove", name });
+    if (data.error) setMsg(data.error, "err");
+    else { state = data; setMsg("已取消", "ok"); render(); }
+  } catch (err) {
+    setMsg("取消失敗，請再試一次", "err");
+  } finally {
+    busy = false;
+  }
+}
+
+function setAdminMsg(text, kind) {
+  const el = $("adminMsg");
+  el.textContent = text || "";
+  el.className = "msg" + (kind ? " " + kind : "");
+}
+
+async function adminCall(action) {
+  const password = $("pw").value;
+  if (!password) return setAdminMsg("請輸入主辦人密碼", "err");
+  const payload = { action, password };
+  if (action === "new") {
+    payload.title = $("newTitle").value.trim();
+    payload.limit = $("newLimit").value.trim();
+    payload.menu = $("newMenu").value;
+    if (!payload.title) return setAdminMsg("請輸入標題", "err");
+    if (!confirm("確定要開新接龍嗎？目前的名單會封存到試算表的「歷史」分頁。")) return;
+  }
+  busy = true; setAdminMsg("處理中…");
+  try {
+    const data = await api(payload);
+    if (data.error) { setAdminMsg(data.error, "err"); }
+    else {
+      state = data; render();
+      setAdminMsg(action === "new" ? "已開新接龍！" : action === "close" ? "已截止" : "已重新開放", "ok");
+      if (action === "new") { $("newTitle").value = ""; $("newLimit").value = ""; $("newMenu").value = ""; }
+    }
+  } catch (err) {
+    setAdminMsg("操作失敗，請再試一次", "err");
+  } finally {
+    busy = false;
+  }
+}
+$("newBtn").onclick = () => adminCall("new");
+$("closeBtn").onclick = () => adminCall("close");
+$("openBtn").onclick = () => adminCall("open");
+
+$("minus").onclick = () => { if (qty > 1) { qty--; $("qty").textContent = qty; } };
+$("plus").onclick = () => { if (qty < 20) { qty++; $("qty").textContent = qty; } };
+$("submit").onclick = submit;
+try { $("name").value = localStorage.getItem("chain-name") || ""; } catch (e) {}
+
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>
